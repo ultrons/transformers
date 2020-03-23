@@ -80,8 +80,6 @@ from .modeling_distilbert import (
 from .modeling_electra import (
     ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
     ElectraForMaskedLM,
-    ElectraForPreTraining,
-    ElectraModel,
 )
 from .modeling_flaubert import (
     FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
@@ -169,7 +167,6 @@ MODEL_MAPPING = OrderedDict(
         (FlaubertConfig, FlaubertModel),
         (XLMConfig, XLMModel),
         (CTRLConfig, CTRLModel),
-        (ElectraConfig, ElectraModel),
     ]
 )
 
@@ -190,7 +187,6 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (FlaubertConfig, FlaubertWithLMHeadModel),
         (XLMConfig, XLMWithLMHeadModel),
         (CTRLConfig, CTRLLMHeadModel),
-        (ElectraConfig, ElectraForPreTraining),
     ]
 )
 
