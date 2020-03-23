@@ -77,7 +77,12 @@ from .modeling_distilbert import (
     DistilBertForTokenClassification,
     DistilBertModel,
 )
-from .modeling_electra import ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP, ElectraForMaskedLM
+from .modeling_electra import (
+    ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
+    ElectraForMaskedLM,
+    ElectraForTokenClassification,
+    ElectraModel,
+)
 from .modeling_flaubert import (
     FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     FlaubertForQuestionAnsweringSimple,
@@ -164,6 +169,7 @@ MODEL_MAPPING = OrderedDict(
         (FlaubertConfig, FlaubertModel),
         (XLMConfig, XLMModel),
         (CTRLConfig, CTRLModel),
+        (ElectraConfig, ElectraModel),
     ]
 )
 
@@ -184,6 +190,8 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (FlaubertConfig, FlaubertWithLMHeadModel),
         (XLMConfig, XLMWithLMHeadModel),
         (CTRLConfig, CTRLLMHeadModel),
+        # ELECTRA's main model is for classifying tokens as being generated or not, hence the token classification model
+        (ElectraConfig, ElectraForTokenClassification),
     ]
 )
 
@@ -244,6 +252,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (BertConfig, BertForTokenClassification),
         (XLNetConfig, XLNetForTokenClassification),
         (AlbertConfig, AlbertForTokenClassification),
+        (ElectraConfig, ElectraForTokenClassification),
     ]
 )
 
@@ -434,7 +443,7 @@ class AutoModelForPreTraining(object):
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
                 - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
-                - isInstance of `electra` configuration class: :class:`~transformers.ElectraForPreTraining` (Electra model)
+                - isInstance of `electra` configuration class: :class:`~transformers.ElectraForTokenClassification` (Electra model)
 
         Examples::
 
@@ -1004,6 +1013,7 @@ class AutoModelForTokenClassification:
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetModelForTokenClassification` (XLNet model)
                 - isInstance of `camembert` configuration class: :class:`~transformers.CamembertModelForTokenClassification` (Camembert model)
                 - isInstance of `roberta` configuration class: :class:`~transformers.RobertaModelForTokenClassification` (Roberta model)
+                - isInstance of `electra` configuration class: :class:`~transformers.ElectraForTokenClassification` (Electra model)
 
         Examples::
 
@@ -1040,6 +1050,7 @@ class AutoModelForTokenClassification:
             - contains `bert`: :class:`~transformers.BertForTokenClassification` (Bert model)
             - contains `xlnet`: :class:`~transformers.XLNetForTokenClassification` (XLNet model)
             - contains `roberta`: :class:`~transformers.RobertaForTokenClassification` (Roberta model)
+            - contains `electra`: :class:`~transformers.ElectraForTokenClassification` (Electra model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
