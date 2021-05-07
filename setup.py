@@ -222,7 +222,7 @@ extras["sklearn"] = deps_list("scikit-learn")
 extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "keras2onnx")
 extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "keras2onnx")
 
-extras["torch"] = deps_list("torch")
+#extras["torch"] = deps_list("torch")
 
 if os.name == "nt":  # windows
     extras["retrieval"] = deps_list("datasets")  # faiss is not supported on windows
@@ -257,7 +257,7 @@ extras["quality"] = deps_list("black", "isort", "flake8")
 
 extras["all"] = (
     extras["tf"]
-    + extras["torch"]
+ #   + extras["torch"]
     + extras["flax"]
     + extras["sentencepiece"]
     + extras["tokenizers"]
@@ -298,7 +298,7 @@ extras["torchhub"] = deps_list(
     "requests",
     "sacremoses",
     "sentencepiece",
-    "torch",
+#    "torch",
     "tokenizers",
     "tqdm",
 )
