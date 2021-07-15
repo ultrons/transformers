@@ -45,6 +45,11 @@ from ...utils import logging
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_t5 import T5Config
 
+#from fairseq.model_parallel.megatron.mpu import (
+from xla_add.megatron.mpu import (
+    ColumnParallelLinear,
+    RowParallelLinear,
+)
 
 logger = logging.get_logger(__name__)
 
@@ -250,8 +255,10 @@ class T5LayerNorm(nn.Module):
 class T5DenseReluDense(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.wi = nn.Linear(config.d_model, config.d_ff, bias=False)
-        self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
+        self.wi = ColumnParallelLinear(config.d_model, config.d_ff, gather_output=False)
+        self.wo = RowParallelLinear(config.d_ff, config.d_model, input_is_parallel=True)
+        #self.wi = nn.Linear(config.d_model, config.d_ff, bias=False)
+        #self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states):
@@ -305,21 +312,30 @@ class T5LayerFF(nn.Module):
 class T5Attention(nn.Module):
     def __init__(self, config: T5Config, has_relative_attention_bias=False):
         super().__init__()
+        self.model_parallel_size = config.model_parallel_size
         self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias
 
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.d_model = config.d_model
-        self.key_value_proj_dim = config.d_kv
-        self.n_heads = config.num_heads
+        #self.key_value_proj_dim = config.d_kv
+        #self.n_heads = config.num_heads
+        #self.dropout = config.dropout_rate
+        #self.inner_dim = self.n_heads * self.key_value_proj_dim
+        self.key_value_proj_dim = config.d_kv // self.model_parallel_size
+        self.n_heads = config.num_heads // self.model_parallel_size
         self.dropout = config.dropout_rate
-        self.inner_dim = self.n_heads * self.key_value_proj_dim
+        self.inner_dim = self.n_heads * self.key_value_proj_dim * self.model_parallel_size
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
-        self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
+        #self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        #self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        #self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        #self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
+        self.q = ColumnParallelLinear(self.d_model, self.inner_dim, gather_output=False, bias=False)
+        self.k = ColumnParallelLinear(self.d_model, self.inner_dim, gather_output=False, bias=False)
+        self.v = ColumnParallelLinear(self.d_model, self.inner_dim, gather_output=False, bias=False)
+        self.o = RowParallelLinear(self.inner_dim, self.d_model, input_is_parallel=True, bias=False)
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
@@ -443,7 +459,8 @@ class T5Attention(nn.Module):
 
         def unshape(states):
             """reshape"""
-            return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
+            #return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
+            return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim // self.model_parallel_size)
 
         def project(hidden_states, proj_layer, key_value_states, past_key_value):
             """projects hidden states correctly to key/query states"""
@@ -500,7 +517,8 @@ class T5Attention(nn.Module):
             if mask is not None:
                 position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
-        scores += position_bias
+        #scores += position_bias
+        scores = scores + position_bias
         attn_weights = F.softmax(scores.float(), dim=-1).type_as(
             scores
         )  # (batch_size, n_heads, seq_length, key_length)

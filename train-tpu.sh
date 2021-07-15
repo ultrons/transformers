@@ -1,6 +1,7 @@
 export XLA_USE_BF16=1
 export PT_XLA_DEBUG=1
-export TPU_IP_ADDRESS=10.84.145.26
+export TPU_IP_ADDRESS=10.120.101.234	
+#export TPU_IP_ADDRESS=10.21.168.226
 export XRT_TPU_CONFIG="tpu_worker;0;${TPU_IP_ADDRESS}:8470"
 python3 ./examples/pytorch/xla_spawn.py --num_cores=8 \
 	 examples/pytorch/summarization/run_summarization.py \

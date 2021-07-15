@@ -120,6 +120,7 @@ class T5Config(PretrainedConfig):
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
         self.gradient_checkpointing = gradient_checkpointing
+        self.model_parallel_size = 4
 
     @property
     def hidden_size(self):
