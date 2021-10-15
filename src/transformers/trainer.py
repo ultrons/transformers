@@ -577,7 +577,7 @@ class Trainer:
                     self.train_dataset,
                     batch_size=self.args.per_device_train_batch_size,
                     num_replicas=self.args.world_size,
-                    rank=self.args.process_index,
+                    rank=(self.args.process_index // 4),
                     seed=self.args.seed,
                 )
             else:
