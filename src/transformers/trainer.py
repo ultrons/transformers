@@ -127,7 +127,8 @@ from .training_args import ParallelMode, TrainingArguments
 from .utils import logging
 from .utils.modeling_auto_mapping import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
 
-
+import torch_xla.core.xla_model as xm
+from  xla_add.mpu.core import save as mp_save
 _is_torch_generator_available = False
 _is_native_amp_available = False
 
@@ -573,11 +574,12 @@ class Trainer:
                 and not self.args.dataloader_drop_last
             ):
                 # Use a loop for TPUs when drop_last is False to have all batches have the same size.
+                from  xla_add.mpu.initialize import get_data_parallel_rank, get_data_parallel_world_size
                 return DistributedSamplerWithLoop(
                     self.train_dataset,
                     batch_size=self.args.per_device_train_batch_size,
-                    num_replicas=self.args.world_size,
-                    rank=(self.args.process_index // 4),
+                    num_replicas=get_data_parallel_world_size(),
+                    rank=get_data_parallel_rank(),
                     seed=self.args.seed,
                 )
             else:
@@ -1030,12 +1032,19 @@ class Trainer:
             self.optimizer, self.lr_scheduler = None, None
 
         # Load potential model checkpoint
+        shard_dir_added = False
         if isinstance(resume_from_checkpoint, bool) and resume_from_checkpoint:
             resume_from_checkpoint = get_last_checkpoint(args.output_dir)
+            from xla_add.mpu.initialize import get_model_parallel_rank
+            resume_from_checkpoint = os.path.join(resume_from_checkpoint, f"rank-{get_model_parallel_rank()}")
+            shard_dir_added = True
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
 
         if resume_from_checkpoint is not None:
+            if not shard_dir_added:
+                from xla_add.mpu.initialize import get_model_parallel_rank
+                resume_from_checkpoint = os.path.join(resume_from_checkpoint, f"rank-{get_model_parallel_rank()}")
             if not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
                 raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
 
@@ -1295,7 +1304,8 @@ class Trainer:
                     if self.deepspeed:
                         pass  # called outside the loop
                     elif is_torch_tpu_available():
-                        xm.optimizer_step(self.optimizer)
+                        import xla_add.mpu as mpu
+                        xm.optimizer_step(self.optimizer, groups=mpu.initialize.get_data_parallel_global_group())
                     elif self.use_amp:
                         scale_before = self.scaler.get_scale()
                         self.scaler.step(self.optimizer)
@@ -1438,6 +1448,7 @@ class Trainer:
         # assert unwrap_model(model) is self.model, "internal model should be a reference to self.model"
 
         # Save model checkpoint
+        #checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}/rank-{get_model_parallel_rank()}"
         checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
 
         if self.hp_search_backend is not None and trial is not None:
@@ -1454,6 +1465,9 @@ class Trainer:
             self.store_flos()
 
         output_dir = os.path.join(run_dir, checkpoint_folder)
+        from xla_add.mpu.initialize import get_model_parallel_rank
+        output_dir = os.path.join(output_dir, f"rank-{get_model_parallel_rank()}")
+
         self.save_model(output_dir)
         if self.deepspeed:
             # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
@@ -1466,9 +1480,9 @@ class Trainer:
 
         if is_torch_tpu_available():
             xm.rendezvous("saving_optimizer_states")
-            xm.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
+            mp_save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
             with warnings.catch_warnings(record=True) as caught_warnings:
-                xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+                mp_save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
                 reissue_pt_warnings(caught_warnings)
         elif is_sagemaker_mp_enabled():
             if smp.dp_rank() == 0:
@@ -1792,6 +1806,8 @@ class Trainer:
 
         if output_dir is None:
             output_dir = self.args.output_dir
+            from xla_add.mpu.initialize import get_model_parallel_rank
+            output_dir = os.path.join(output_dir, f"rank-{get_model_parallel_rank()}")
 
         if is_torch_tpu_available():
             self._save_tpu(output_dir)
@@ -1849,14 +1865,14 @@ class Trainer:
                     output_dir,
                     save_config=self.is_world_process_zero(),
                     state_dict=self.model.state_dict(),
-                    save_function=xm.save,
+                    save_function=mp_save,
                 )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
                 state_dict = self.model.state_dict()
-                xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
+                mp_save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            self.model.save_pretrained(output_dir, save_config=self.is_world_process_zero(), save_function=xm.save)
+            self.model.save_pretrained(output_dir, save_config=self.is_world_process_zero(), save_function=mp_save)
         if self.tokenizer is not None and self.is_world_process_zero():
             self.tokenizer.save_pretrained(output_dir)
 

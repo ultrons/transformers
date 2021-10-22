@@ -45,8 +45,7 @@ from ...utils import logging
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_t5 import T5Config
 
-#from fairseq.model_parallel.megatron.mpu import (
-from xla_add.megatron.mpu import (
+from xla_add.mpu.layers import (
     ColumnParallelLinear,
     RowParallelLinear,
 )
@@ -455,6 +454,7 @@ class T5Attention(nn.Module):
 
         def shape(states):
             """projection"""
+            result = states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
             return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
         def unshape(states):
@@ -1252,7 +1252,8 @@ class T5Model(T5PreTrainedModel):
 
     def __init__(self, config: T5Config):
         super().__init__(config)
-        self.shared = nn.Embedding(config.vocab_size, config.d_model)
+        #self.shared = nn.Embedding(config.vocab_size, config.d_model)
+        self.shared = nn.ParallelEmbedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False

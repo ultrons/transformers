@@ -262,7 +262,7 @@ def main():
             "You're running a t5 model but didn't provide a source prefix, which is the expected, e.g. with "
             "`--source_prefix 'summarize: ' `"
         )
-    training_args.logging_steps = 1
+    #training_args.logging_steps = 1
 
     # Detecting last checkpoint.
     last_checkpoint = None
@@ -590,8 +590,11 @@ def main():
     return results
 
 
+import xla_add.mpu as mpu 
 def _mp_fn(index):
     # For xla_spawn (TPUs)
+    import torch_xla.core.xla_model as xm
+    mpu.initialize_model_parallel(4)
     main()
 
 
