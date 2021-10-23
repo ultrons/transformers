@@ -262,7 +262,7 @@ def main():
             "You're running a t5 model but didn't provide a source prefix, which is the expected, e.g. with "
             "`--source_prefix 'summarize: ' `"
         )
-    #training_args.logging_steps = 1
+    training_args.logging_steps = 100
 
     # Detecting last checkpoint.
     last_checkpoint = None

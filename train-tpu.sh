@@ -16,7 +16,10 @@ python3 ./examples/pytorch/xla_spawn.py --num_cores=8 \
     --pad_to_max_length \
     --save_total_limit 5 \
     --save_steps 1000 \
-    --resume_from_checkpoint /tmp/tst-summarization \
+    --logging_steps 100 \
+    --resume_from_checkpoint /mnt/common/t5-3b-checkpoints/checkpoint-10000
+    
+    #--resume_from_checkpoint /tmp/tst-summarization/checkpoint-1000 \
     
 #--max_steps 1
     #--predict_with_generate \
