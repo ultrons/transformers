@@ -311,7 +311,8 @@ class T5LayerFF(nn.Module):
 class T5Attention(nn.Module):
     def __init__(self, config: T5Config, has_relative_attention_bias=False):
         super().__init__()
-        self.model_parallel_size = config.model_parallel_size
+        from xla_add.mpu.initialize import get_model_parallel_world_size
+        self.model_parallel_size = get_model_parallel_world_size()
         self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias
 
@@ -454,12 +455,10 @@ class T5Attention(nn.Module):
 
         def shape(states):
             """projection"""
-            result = states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
             return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
         def unshape(states):
             """reshape"""
-            #return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
             return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim // self.model_parallel_size)
 
         def project(hidden_states, proj_layer, key_value_states, past_key_value):
