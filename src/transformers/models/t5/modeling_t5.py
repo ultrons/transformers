@@ -48,6 +48,7 @@ from .configuration_t5 import T5Config
 from xla_add.mpu.layers import (
     ColumnParallelLinear,
     RowParallelLinear,
+    ParallelEmbedding,
 )
 
 logger = logging.get_logger(__name__)
@@ -323,7 +324,7 @@ class T5Attention(nn.Module):
         #self.dropout = config.dropout_rate
         #self.inner_dim = self.n_heads * self.key_value_proj_dim
         self.key_value_proj_dim = config.d_kv // self.model_parallel_size
-        self.n_heads = config.num_heads // self.model_parallel_size
+        self.n_heads = config.num_heads
         self.dropout = config.dropout_rate
         self.inner_dim = self.n_heads * self.key_value_proj_dim * self.model_parallel_size
 
@@ -1251,8 +1252,8 @@ class T5Model(T5PreTrainedModel):
 
     def __init__(self, config: T5Config):
         super().__init__(config)
-        #self.shared = nn.Embedding(config.vocab_size, config.d_model)
-        self.shared = nn.ParallelEmbedding(config.vocab_size, config.d_model)
+        self.shared = nn.Embedding(config.vocab_size, config.d_model)
+        #self.shared = ParallelEmbedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
@@ -1440,6 +1441,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         self.model_dim = config.d_model
 
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
+        #self.shared = ParallelEmbedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False

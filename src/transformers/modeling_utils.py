@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import torch
+import torch_xla.core.xla_model as xm
 from torch import Tensor, device, dtype, nn
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
@@ -1165,6 +1166,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             with no_init_weights(_enable=_fast_init):
                 model = cls(config, *model_args, **model_kwargs)
+        print("#####################")
+        print(model)
+        print("#####################")
 
         if from_tf:
             if resolved_archive_file.endswith(".index"):
@@ -1281,7 +1285,48 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model._init_weights(module)
         # copy state_dict so _load_from_state_dict can modify it
         metadata = getattr(state_dict, "_metadata", None)
+
         state_dict = state_dict.copy()
+        # Modify the state_dict for opsharded model parallel loading
+        from xla_add.mpu.initialize import get_model_parallel_world_size, get_model_parallel_rank
+
+        rank = get_model_parallel_rank()
+        world_size = get_model_parallel_world_size()
+        for param_tensor in state_dict:
+            tensor_shape = state_dict[param_tensor].size()
+            shard_slice_index = None
+
+            if re.search(r"DenseReluDense.wo.weight", param_tensor):
+                shard_slice_index = 1
+            if re.search(r"DenseReluDense.wi.weight", param_tensor):
+                shard_slice_index = 0
+            if re.search(r"EncDecAttention.o.weight", param_tensor):
+                shard_slice_index = 1
+            if re.search(r"EncDecAttention.v.weight", param_tensor):
+                shard_slice_index = 0
+            if re.search(r"EncDecAttention.k.weight", param_tensor):
+                shard_slice_index = 0
+            if re.search(r"EncDecAttention.q.weight", param_tensor):
+                shard_slice_index = 0
+            if re.search(r"SelfAttention.o.weight", param_tensor):
+                shard_slice_index = 1
+            if re.search(r"SelfAttention.v.weight", param_tensor):
+                shard_slice_index = 0
+            if re.search(r"SelfAttention.k.weight", param_tensor):
+                shard_slice_index = 0
+            if re.search(r"SelfAttention.q.weight", param_tensor):
+                shard_slice_index = 0
+            # TODO: Uncomment when sparse embedding sharding is implemented
+            #if re.search(r"shared.weight", param_tensor):
+            #    shard_slice_index = 1
+
+            if shard_slice_index is not None:
+                slice_size = tensor_shape[shard_slice_index] // world_size
+                slice_start = slice_size * rank
+                state_dict[param_tensor] = torch.narrow(state_dict[param_tensor], shard_slice_index, slice_start, slice_size)
+            else:
+
+
         if metadata is not None:
             state_dict._metadata = metadata
 

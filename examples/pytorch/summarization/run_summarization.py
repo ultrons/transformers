@@ -345,17 +345,18 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
-   #model = AutoModelForSeq2SeqLM.from_pretrained(
-   #    model_args.model_name_or_path,
-   #    from_tf=bool(".ckpt" in model_args.model_name_or_path),
-   #    config=config,
-   #    cache_dir=model_args.cache_dir,
-   #    revision=model_args.model_revision,
-   #    use_auth_token=True if model_args.use_auth_token else None,
-   #)
+    model = AutoModelForSeq2SeqLM.from_pretrained(
+        model_args.model_name_or_path,
+        from_tf=bool(".ckpt" in model_args.model_name_or_path),
+        config=config,
+        cache_dir=model_args.cache_dir,
+        revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
+    )
 
-   #model.resize_token_embeddings(len(tokenizer))
-    model = transformers.T5ForConditionalGeneration(config)
+    model.resize_token_embeddings(len(tokenizer))
+    #PRE-TRAIN: 
+    #model = transformers.T5ForConditionalGeneration(config)
 
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
@@ -594,7 +595,7 @@ import xla_add.mpu as mpu
 def _mp_fn(index):
     # For xla_spawn (TPUs)
     import torch_xla.core.xla_model as xm
-    mpu.initialize_model_parallel(4)
+    mpu.initialize_model_parallel(8)
     main()
 
 
