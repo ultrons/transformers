@@ -1324,7 +1324,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 slice_size = tensor_shape[shard_slice_index] // world_size
                 slice_start = slice_size * rank
                 state_dict[param_tensor] = torch.narrow(state_dict[param_tensor], shard_slice_index, slice_start, slice_size)
-            else:
 
 
         if metadata is not None:

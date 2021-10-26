@@ -10,14 +10,17 @@ python3 ./examples/pytorch/xla_spawn.py --num_cores=8 \
     --dataset_config "3.0.0" \
     --source_prefix "summarize: " \
     --output_dir /mnt/common/t5-3b-checkpoints \
-    --per_device_train_batch_size=4 \
-    --per_device_eval_batch_size=4 \
+    --per_device_train_batch_size=2 \
+    --per_device_eval_batch_size=2 \
     --overwrite_output_dir \
     --pad_to_max_length \
     --save_total_limit 5 \
-    --save_steps 1000 \
+    --save_steps 100 \
     --logging_steps 100 \
-    --resume_from_checkpoint /mnt/common/t5-3b-checkpoints/checkpoint-10000
+
+
+    #
+    #--resume_from_checkpoint /mnt/common/t5-3b-checkpoints/checkpoint-10000
     
     #--resume_from_checkpoint /tmp/tst-summarization/checkpoint-1000 \
     
