@@ -1581,6 +1581,10 @@ class Trainer:
         # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
         self._total_loss_scalar = 0.0
         self._globalstep_last_logged = self.state.global_step
+        import torch_xla.core.xla_model as xm
+        from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP
+        #model = model.to(xm.xla_device())
+        model = FSDP(model)
         model.zero_grad()
 
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
@@ -1713,7 +1717,9 @@ class Trainer:
                             self.scaler.step(self.optimizer)
                             self.scaler.update()
                         else:
-                            xm.optimizer_step(self.optimizer)
+                            #xm.optimizer_step(self.optimizer)
+                            self.optimizer.step()
+
                     elif self.do_grad_scaling:
                         scale_before = self.scaler.get_scale()
                         self.scaler.step(self.optimizer)
