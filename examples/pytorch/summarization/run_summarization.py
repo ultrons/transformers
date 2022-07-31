@@ -117,6 +117,31 @@ class ModelArguments:
         },
     )
 
+    use_fsdp: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Will use nested XLA FSDP to shard each individual transformer layer in the BERT MLM model."
+            )
+        },
+    )
+    use_nested_fsdp: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Will use nested XLA FSDP to shard each individual transformer layer in the BERT MLM model."
+            )
+        },
+    )
+    use_grad_ckpt: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Will use gradient checkpointing over each individual transformer layer in the BERT MLM model."
+            )
+        },
+    )
+
 
 @dataclass
 class DataTrainingArguments:
@@ -421,6 +446,42 @@ def main():
     )
 
     model.resize_token_embeddings(len(tokenizer))
+
+    if model_args.use_fsdp:
+        import torch_xla.core.xla_model as xm
+        from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP, checkpoint_module
+        fsdp_wrap = lambda m: FSDP(m.to(xm.xla_device()))
+        # A wrapper over each transformer block with inner FSDP
+        nested_fsdp_wrap = fsdp_wrap if model_args.use_nested_fsdp else (lambda m: m)
+        # A wrapper over each transformer block with gradient checkpointing
+        grad_ckpt_wrap = checkpoint_module if model_args.use_grad_ckpt else (lambda m: m)
+        if model_args.use_nested_fsdp or model_args.use_grad_ckpt:
+            # applying the wrappers above to the FSDP layers
+            for i in range(len(model.encoder.block)):
+                model.encoder.block[i] = nested_fsdp_wrap(grad_ckpt_wrap(model.encoder.block[i]))
+            for i in range(len(model.decoder.block)):
+                model.decoder.block[i] = nested_fsdp_wrap(grad_ckpt_wrap(model.decoder.block[i]))
+        # Wrap the base model with an outer FSDP wrapper
+        # Also, copy the signature of the original model's forward method -- otherwise
+        # Hugging Face datasets drops the columns not appearing in the forward method's argument
+        # in its `_remove_unused_columns` in trainer.py
+        import inspect
+        forward_signature = inspect.signature(model.forward.__func__)
+        model = fsdp_wrap(model)
+        model.forward.__func__.__signature__ = forward_signature
+
+        # Patch `xm.optimizer_step` not to reduce gradients in this case,
+        # as FSDP does not need gradient reduction over sharded parameters.
+        # Note: this ultimately should be something to be implemented in the Hugging Face trainer
+        # to directly call `optimizer.step()` when the model is an FSDP instance,
+        # but we chose to patch it here to get a standalone example without changing the Hugging Face trainer
+        def patched_optimizer_step(optimizer, barrier=False, optimizer_args={}):
+            loss = optimizer.step(**optimizer_args)
+            if barrier:
+                xm.mark_step()
+            return loss
+
+        xm.optimizer_step = patched_optimizer_step
 
     if model.config.decoder_start_token_id is None and isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
         if isinstance(tokenizer, MBartTokenizer):
