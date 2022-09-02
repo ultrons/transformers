@@ -28,7 +28,7 @@ import sys
 from dataclasses import dataclass, field
 from itertools import chain
 from typing import Optional
-
+import torch_xla.debug.profiler as xp
 import datasets
 from datasets import load_dataset
 
@@ -116,6 +116,30 @@ class ModelArguments:
             "help": (
                 "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
+            )
+        },
+    )
+    use_fsdp: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Will use nested XLA FSDP to shard each individual transformer layer in the BERT MLM model."
+            )
+        },
+    )
+    use_nested_fsdp: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Will use nested XLA FSDP to shard each individual transformer layer in the BERT MLM model."
+            )
+        },
+    )
+    use_grad_ckpt: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Will use gradient checkpointing over each individual transformer layer in the BERT MLM model."
             )
         },
     )
@@ -239,7 +263,8 @@ def main():
         + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
-
+    server = xp.start_server(9229)
+    logger.info('Profiling server started: {str(server)}')
     # Detecting last checkpoint.
     last_checkpoint = None
     if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
@@ -388,7 +413,41 @@ def main():
         logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
 
     model.resize_token_embeddings(len(tokenizer))
+    if model_args.use_fsdp:
+        import torch_xla.core.xla_model as xm
+        from pprint import pprint
+        from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP, checkpoint_module
+        fsdp_wrap = lambda m: FSDP(m.to(xm.xla_device()))
+        # A wrapper over each transformer block with inner FSDP
+        nested_fsdp_wrap = fsdp_wrap if model_args.use_nested_fsdp else (lambda m: m)
+        # A wrapper over each transformer block with gradient checkpointing
+        grad_ckpt_wrap = checkpoint_module if model_args.use_grad_ckpt else (lambda m: m)
+        pprint(vars(model))
+        if model_args.use_nested_fsdp or model_args.use_grad_ckpt:
+            # applying the wrappers above to the FSDP layers
+            for i in range(len(model.transformer.h)):
+                model.transformer.h[i] = nested_fsdp_wrap(grad_ckpt_wrap(model.transformer.h[i]))
+        # Wrap the base model with an outer FSDP wrapper
+        # Also, copy the signature of the original model's forward method -- otherwise
+        # Hugging Face datasets drops the columns not appearing in the forward method's argument
+        # in its `_remove_unused_columns` in trainer.py
+        import inspect
+        forward_signature = inspect.signature(model.forward.__func__)
+        model = fsdp_wrap(model)
+        model.forward.__func__.__signature__ = forward_signature
 
+        # Patch `xm.optimizer_step` not to reduce gradients in this case,
+        # as FSDP does not need gradient reduction over sharded parameters.
+        # Note: this ultimately should be something to be implemented in the Hugging Face trainer
+        # to directly call `optimizer.step()` when the model is an FSDP instance,
+        # but we chose to patch it here to get a standalone example without changing the Hugging Face trainer
+        def patched_optimizer_step(optimizer, barrier=False, optimizer_args={}):
+            loss = optimizer.step(**optimizer_args)
+            if barrier:
+                xm.mark_step()
+            return loss
+
+        xm.optimizer_step = patched_optimizer_step
     # Preprocessing the datasets.
     # First we tokenize all the texts.
     if training_args.do_train:
