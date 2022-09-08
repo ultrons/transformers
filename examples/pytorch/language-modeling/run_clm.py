@@ -123,7 +123,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use nested XLA FSDP to shard each individual transformer layer in the BERT MLM model."
+                "Will use nested XLA FSDP to shard each individual transformer layer in the GPT MLM model."
             )
         },
     )
@@ -131,7 +131,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use nested XLA FSDP to shard each individual transformer layer in the BERT MLM model."
+                "Will use nested XLA FSDP to shard each individual transformer layer in the GPT MLM model."
             )
         },
     )
@@ -139,7 +139,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use gradient checkpointing over each individual transformer layer in the BERT MLM model."
+                "Will use gradient checkpointing over each individual transformer layer in the GPT MLM model."
             )
         },
     )
