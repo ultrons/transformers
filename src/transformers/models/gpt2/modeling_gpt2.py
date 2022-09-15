@@ -191,7 +191,7 @@ class GPT2Attention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
-        attn_weights = torch.matmul(query, key.transpose(-1, -2))
+        attn_weights = torch.einsum('ijkl,ijml->ijkm', query, key)
 
         if self.scale_attn_weights:
             attn_weights = attn_weights / torch.tensor(
@@ -226,7 +226,7 @@ class GPT2Attention(nn.Module):
         if head_mask is not None:
             attn_weights = attn_weights * head_mask
 
-        attn_output = torch.matmul(attn_weights, value)
+        attn_output = torch.einsum('ijkl,ijlm->ijkm', attn_weights, value)
 
         return attn_output, attn_weights
 
@@ -695,7 +695,6 @@ class GPT2Model(GPT2PreTrainedModel):
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([GPT2Block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
-
         # Model parallel
         self.model_parallel = False
         self.device_map = None
@@ -863,7 +862,7 @@ class GPT2Model(GPT2PreTrainedModel):
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
-
+            
             # Model parallel
             if self.model_parallel:
                 torch.cuda.set_device(hidden_states.device)
