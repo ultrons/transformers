@@ -409,33 +409,20 @@ def main():
         )
     else:
         model = AutoModelForCausalLM.from_config(config)
-        n_params = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
-        logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
+        # n_params = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
+        # logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
 
     model.resize_token_embeddings(len(tokenizer))
     if model_args.use_fsdp:
         import torch_xla.core.xla_model as xm
         from pprint import pprint
         from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP, checkpoint_module
-        fsdp_wrap = lambda m: FSDP(m.to(xm.xla_device()), shard_param_on_dim_0=True)
-        # A wrapper over each transformer block with inner FSDP
-        nested_fsdp_wrap = fsdp_wrap if model_args.use_nested_fsdp else (lambda m: m)
-        # A wrapper over each transformer block with gradient checkpointing
-        grad_ckpt_wrap = checkpoint_module if model_args.use_grad_ckpt else (lambda m: m)
-        pprint(vars(model))
-        if model_args.use_nested_fsdp or model_args.use_grad_ckpt:
-            # applying the wrappers above to the FSDP layers
-            for i in range(len(model.transformer.h)):
-                model.transformer.h[i] = nested_fsdp_wrap(grad_ckpt_wrap(model.transformer.h[i]))
-        # Wrap the base model with an outer FSDP wrapper
-        # Also, copy the signature of the original model's forward method -- otherwise
-        # Hugging Face datasets drops the columns not appearing in the forward method's argument
-        # in its `_remove_unused_columns` in trainer.py
+        fsdp_wrap = lambda m: FSDP(m.to(xm.xla_device()), compute_dtype=torch.bfloat16, shard_param_on_dim_0=True, pin_layout_in_collective_ops=True)
         import inspect
         forward_signature = inspect.signature(model.forward.__func__)
         model = fsdp_wrap(model)
         model.forward.__func__.__signature__ = forward_signature
-
+ 
         # Patch `xm.optimizer_step` not to reduce gradients in this case,
         # as FSDP does not need gradient reduction over sharded parameters.
         # Note: this ultimately should be something to be implemented in the Hugging Face trainer
@@ -446,8 +433,9 @@ def main():
             if barrier:
                 xm.mark_step()
             return loss
-
+ 
         xm.optimizer_step = patched_optimizer_step
+    # Preprocessing the datasets.
     # Preprocessing the datasets.
     # First we tokenize all the texts.
     if training_args.do_train:
@@ -585,7 +573,7 @@ def main():
         elif last_checkpoint is not None:
             checkpoint = last_checkpoint
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
-        trainer.save_model()  # Saves the tokenizer too for easy upload
+        # trainer.save_model()  # Saves the tokenizer too for easy upload
 
         metrics = train_result.metrics
 
@@ -630,7 +618,7 @@ def main():
         trainer.create_model_card(**kwargs)
 
 
-def _mp_fn(index):
+def _mp_fn():
     # For xla_spawn (TPUs)
     main()
 

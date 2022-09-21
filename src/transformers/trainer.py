@@ -1721,13 +1721,13 @@ class Trainer:
             step = -1
             for step, inputs in enumerate(epoch_iterator):
                 
-                memory_info = xm.get_memory_info(xm.xla_device())
-                gb_free = memory_info["kb_free"] / 1024 / 1024
-                gb_total = memory_info["kb_total"] / 1024 / 1024
-                logger.info(
-                        f"Before step:  free={gb_free: .4f} GB, total={gb_total: .4f} GB"
-                )
-                xm.master_print(f"Before step:  free={gb_free: .4f} GB, total={gb_total: .4f} GB")
+                # memory_info = xm.get_memory_info(xm.xla_device())
+                # gb_free = memory_info["kb_free"] / 1024 / 1024
+                # gb_total = memory_info["kb_total"] / 1024 / 1024
+                # logger.info(
+                #         f"Before step:  free={gb_free: .4f} GB, total={gb_total: .4f} GB"
+                # )
+                # xm.master_print(f"Before step:  free={gb_free: .4f} GB, total={gb_total: .4f} GB")
                 with xp.StepTrace('train_loop', step_num=step):
                     with xp.Trace('build_graph'):
                         # Skip past any already trained steps if resuming training
@@ -1837,13 +1837,13 @@ class Trainer:
 
                     if self.control.should_epoch_stop or self.control.should_training_stop:
                         break
-                memory_info = xm.get_memory_info(xm.xla_device())
-                gb_free = memory_info["kb_free"] / 1024 / 1024
-                gb_total = memory_info["kb_total"] / 1024 / 1024
-                logger.info(
-                        f"After step: free={gb_free: .4f} GB, total={gb_total: .4f} GB"
-                )
-                xm.master_print(f"Before step:  free={gb_free: .4f} GB, total={gb_total: .4f} GB")
+                # memory_info = xm.get_memory_info(xm.xla_device())
+                # gb_free = memory_info["kb_free"] / 1024 / 1024
+                # gb_total = memory_info["kb_total"] / 1024 / 1024
+                # logger.info(
+                #         f"After step: free={gb_free: .4f} GB, total={gb_total: .4f} GB"
+                # )
+                # xm.master_print(f"Before step:  free={gb_free: .4f} GB, total={gb_total: .4f} GB")
    
             if step < 0:
                 logger.warning(
@@ -1860,13 +1860,13 @@ class Trainer:
                 if is_torch_tpu_available():
                     # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
                     xm.master_print(met.metrics_report())
-                    memory_info = xm.get_memory_info(xm.xla_device())
-                    gb_free = memory_info["kb_free"] / 1024 / 1024
-                    gb_total = memory_info["kb_total"] / 1024 / 1024
-                    xm.master_print(f'free={gb_free: .4f} GB, total={gb_total: .4f} GB')
-                    logger.info(
-                            f"Epoch end:  free={gb_free: .4f} GB, total={gb_total: .4f} GB"
-                    )
+                    # memory_info = xm.get_memory_info(xm.xla_device())
+                    # gb_free = memory_info["kb_free"] / 1024 / 1024
+                    # gb_total = memory_info["kb_total"] / 1024 / 1024
+                    # xm.master_print(f'free={gb_free: .4f} GB, total={gb_total: .4f} GB')
+                    # logger.info(
+                    #        f"Epoch end:  free={gb_free: .4f} GB, total={gb_total: .4f} GB"
+                    # )
                 else:
                     logger.warning(
                         "You enabled PyTorch/XLA debug metrics but you don't have a TPU "
@@ -2159,10 +2159,10 @@ class Trainer:
 
         if is_torch_tpu_available():
             xm.rendezvous("saving_optimizer_states")
-            xm.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
-            with warnings.catch_warnings(record=True) as caught_warnings:
-                xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
-                reissue_pt_warnings(caught_warnings)
+            # xm.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
+            # with warnings.catch_warnings(record=True) as caught_warnings:
+            #    xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
+            #    reissue_pt_warnings(caught_warnings)
         elif is_sagemaker_mp_enabled():
             opt_state_dict = self.optimizer.local_state_dict(gather_if_shard=False)
             smp.barrier()
@@ -2589,7 +2589,8 @@ class Trainer:
             output_dir = self.args.output_dir
 
         if is_torch_tpu_available():
-            self._save_tpu(output_dir)
+            pass
+            # self._save_tpu(output_dir)
         elif is_sagemaker_mp_enabled():
             # Calling the state_dict needs to be done on the wrapped model and on all processes.
             os.makedirs(output_dir, exist_ok=True)

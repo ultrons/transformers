@@ -29,7 +29,8 @@ import sys
 from argparse import REMAINDER, ArgumentParser
 from pathlib import Path
 
-import torch_xla.distributed.xla_multiprocessing as xmp
+from torch_xla.experimental import pjrt 
+# import torch_xla.distributed.xla_multiprocessing as xmp
 
 
 def parse_args():
@@ -76,7 +77,8 @@ def main():
     # Patch sys.argv
     sys.argv = [args.training_script] + args.training_script_args + ["--tpu_num_cores", str(args.num_cores)]
 
-    xmp.spawn(mod._mp_fn, args=(), nprocs=args.num_cores)
+    pjrt.run_multiprocess(mod._mp_fn)
+    # xmp.spawn(mod._mp_fn, args=(), nprocs=args.num_cores)
 
 
 if __name__ == "__main__":

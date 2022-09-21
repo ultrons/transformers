@@ -687,14 +687,33 @@ class GPT2Model(GPT2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        import torch_xla.core.xla_model as xm
+        from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP, checkpoint_module
+        fsdp_wrap = lambda m: FSDP(m.to(xm.xla_device()), compute_dtype=torch.bfloat16, shard_param_on_dim_0=True, pin_layout_in_collective_ops=True)
+        grad_ckpt_wrap = checkpoint_module
+
         self.embed_dim = config.hidden_size
 
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
+        self.wte.apply(self._init_weights)
+
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
+        self.wpe.apply(self._init_weights)
+
 
         self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([GPT2Block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
+        self.drop.apply(self._init_weights)
+        
+        blocks = []
+        for i in range(config.num_hidden_layers):
+            block = GPT2Block(config, layer_idx=i)
+            block.apply(self._init_weights)
+            block = fsdp_wrap(grad_ckpt_wrap(block))
+            blocks.append(block)
+        self.h = nn.ModuleList(blocks)
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.ln_f.apply(self._init_weights)
+        
         # Model parallel
         self.model_parallel = False
         self.device_map = None
