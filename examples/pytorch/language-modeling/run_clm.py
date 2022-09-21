@@ -28,6 +28,7 @@ import sys
 from dataclasses import dataclass, field
 from itertools import chain
 from typing import Optional
+import torch
 import torch_xla.debug.profiler as xp
 import datasets
 from datasets import load_dataset
