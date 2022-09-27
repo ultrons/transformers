@@ -77,7 +77,7 @@ def main():
     # Patch sys.argv
     sys.argv = [args.training_script] + args.training_script_args + ["--tpu_num_cores", str(args.num_cores)]
 
-    pjrt.run_multiprocess(mod._mp_fn)
+    pjrt._run_multiprocess(mod._mp_fn)
     # xmp.spawn(mod._mp_fn, args=(), nprocs=args.num_cores)
 
 
