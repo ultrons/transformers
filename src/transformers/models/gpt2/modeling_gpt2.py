@@ -24,6 +24,9 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+import torch_xla.core.xla_model as xm
+from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP
+from torch_xla.distributed.fsdp import checkpoint_module as grad_ckpt_wrap
 
 from ...pytorch_utils import (
     Conv1D,
@@ -167,6 +170,7 @@ class GPT2Attention(nn.Module):
             self.c_attn = Conv1D(2 * self.embed_dim, self.embed_dim)
             self.q_attn = Conv1D(self.embed_dim, self.embed_dim)
         else:
+            #self.c_attn = grad_ckpt_wrap(Conv1D(3 * self.embed_dim, self.embed_dim))
             self.c_attn = Conv1D(3 * self.embed_dim, self.embed_dim)
         self.c_proj = Conv1D(self.embed_dim, self.embed_dim)
 
@@ -687,10 +691,7 @@ class GPT2Model(GPT2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        import torch_xla.core.xla_model as xm
-        from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP, checkpoint_module
         fsdp_wrap = lambda m: FSDP(m.to(xm.xla_device()), compute_dtype=torch.bfloat16, shard_param_on_dim_0=True, pin_layout_in_collective_ops=True)
-        grad_ckpt_wrap = checkpoint_module
 
         self.embed_dim = config.hidden_size
 
@@ -708,7 +709,12 @@ class GPT2Model(GPT2PreTrainedModel):
         for i in range(config.num_hidden_layers):
             block = GPT2Block(config, layer_idx=i)
             block.apply(self._init_weights)
-            block = fsdp_wrap(grad_ckpt_wrap(block))
+            #block.mlp = grad_ckpt_wrap(block.mlp)
+            block.mlp = fsdp_wrap(block.mlp)
+            block.attn = grad_ckpt_wrap(block.attn)
+            block.attn = fsdp_wrap(block.attn)
+            #block = fsdp_wrap(grad_ckpt_wrap(block))
+            block = fsdp_wrap(block)
             blocks.append(block)
         self.h = nn.ModuleList(blocks)
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
