@@ -384,6 +384,7 @@ def main():
             logger.info(f"New config: {config}")
 
     tokenizer_kwargs = {
+            "model_max_length": data_args.block_size,
         "cache_dir": model_args.cache_dir,
         "use_fast": model_args.use_fast_tokenizer,
         "revision": model_args.model_revision,
@@ -398,6 +399,9 @@ def main():
             "You are instantiating a new tokenizer from scratch. This is not supported by this script."
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
+
+    #SAD HACK
+    tokenizer.model_max_length = data_args.block_size
 
     if model_args.model_name_or_path:
         model = AutoModelForCausalLM.from_pretrained(
@@ -418,7 +422,7 @@ def main():
         import torch_xla.core.xla_model as xm
         from pprint import pprint
         from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP, checkpoint_module
-        fsdp_wrap = lambda m: FSDP(m.to(xm.xla_device()), compute_dtype=torch.bfloat16, shard_param_on_dim_0=True, pin_layout_in_collective_ops=True)
+        fsdp_wrap = lambda m: FSDP(m.to(xm.xla_device()), compute_dtype=torch.bfloat16, shard_param_on_dim_0=True, pin_layout_in_collective_ops=False)
         import inspect
         forward_signature = inspect.signature(model.forward.__func__)
         model = fsdp_wrap(model)
