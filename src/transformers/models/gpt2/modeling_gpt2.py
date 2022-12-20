@@ -691,7 +691,7 @@ class GPT2Model(GPT2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        fsdp_wrap = lambda m: FSDP(m.to(xm.xla_device()), compute_dtype=torch.bfloat16, shard_param_on_dim_0=True, pin_layout_in_collective_ops=False, shard_param_on_dim_0=True)
+        fsdp_wrap = lambda m: FSDP(m.to(xm.xla_device()), compute_dtype=torch.bfloat16, shard_param_on_dim_0=True, pin_layout_in_collective_ops=False)
 
         self.embed_dim = config.hidden_size
 
