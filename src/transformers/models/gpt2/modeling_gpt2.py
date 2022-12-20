@@ -691,7 +691,7 @@ class GPT2Model(GPT2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        fsdp_wrap = lambda m: FSDP(m.to(xm.xla_device()), compute_dtype=torch.bfloat16, shard_param_on_dim_0=True, pin_layout_in_collective_ops=False)
+        fsdp_wrap = lambda m: FSDP(m.to(xm.xla_device()), compute_dtype=torch.bfloat16, shard_param_on_dim_0=True, pin_layout_in_collective_ops=False, shard_param_on_dim_0=True)
 
         self.embed_dim = config.hidden_size
 
@@ -711,7 +711,7 @@ class GPT2Model(GPT2PreTrainedModel):
             block.apply(self._init_weights)
             #block.mlp = grad_ckpt_wrap(block.mlp)
             block.mlp = fsdp_wrap(block.mlp)
-            block.attn = grad_ckpt_wrap(block.attn)
+            #block.attn = grad_ckpt_wrap(block.attn)
             block.attn = fsdp_wrap(block.attn)
             #block = fsdp_wrap(grad_ckpt_wrap(block))
             block = fsdp_wrap(block)
