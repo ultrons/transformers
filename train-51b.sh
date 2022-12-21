@@ -14,8 +14,8 @@ python3 -u examples/pytorch/xla_spawn.py    \
 --num_train_epochs 500   \
 --dataset_name wikitext      \
 --dataset_config_name wikitext-2-raw-v1      \
---per_device_train_batch_size 5     \
---per_device_eval_batch_size 5  \
+--per_device_train_batch_size 4     \
+--per_device_eval_batch_size 4  \
 --do_train   \
 --tensor_parallel_size 4 \
 --use_fsdp  \
