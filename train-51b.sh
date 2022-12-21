@@ -14,9 +14,10 @@ python3 -u examples/pytorch/xla_spawn.py    \
 --num_train_epochs 10   \
 --dataset_name wikitext      \
 --dataset_config_name wikitext-2-raw-v1      \
---per_device_train_batch_size 4     \
---per_device_eval_batch_size 4  \
+--per_device_train_batch_size 2     \
+--per_device_eval_batch_size 2  \
 --do_train   \
+--tensor_parallel_size 8 \
 --use_fsdp  \
 --use_nested_fsdp    \
 --output_dir /tmp/test-clm      \

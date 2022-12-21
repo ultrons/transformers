@@ -128,6 +128,14 @@ class ModelArguments:
             )
         },
     )
+    tensor_parallel_size: int = field(
+        default=1,
+        metadata={
+            "help": (
+                "Define tensor parallel world_size."
+            )
+        },
+    )
     use_nested_fsdp: bool = field(
         default=False,
         metadata={
@@ -422,7 +430,17 @@ def main():
         import torch_xla.core.xla_model as xm
         from pprint import pprint
         from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP, checkpoint_module
-        fsdp_wrap = lambda m: FSDP(m.to(xm.xla_device()), compute_dtype=torch.bfloat16, shard_param_on_dim_0=True, pin_layout_in_collective_ops=False)
+        from xla_add.mpu.initialize import get_data_parallel_rank, get_data_parallel_world_size, get_data_parallel_global_group
+
+        fsdp_wrap = lambda m: FSDP(
+                m.to(xm.xla_device()),
+                compute_dtype=torch.bfloat16, 
+                shard_param_on_dim_0=True, 
+                pin_layout_in_collective_ops=False,
+                sharding_groups=get_data_parallel_global_group(),
+                sharding_world_size=get_data_parallel_world_size(),
+                sharding_rank=get_data_parallel_rank()
+                )
         import inspect
         forward_signature = inspect.signature(model.forward.__func__)
         model = fsdp_wrap(model)
@@ -625,6 +643,15 @@ def main():
 
 def _mp_fn():
     # For xla_spawn (TPUs)
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
+        # If we pass only one argument to the script and it's the path to a json file,
+        # let's parse it to get our arguments.
+        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+    else:
+        model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+    import xla_add.mpu as mpu
+    mpu.initialize_model_parallel(model_args.tensor_parallel_size)
     main()
 
 

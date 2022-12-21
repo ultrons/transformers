@@ -28,6 +28,12 @@ import torch_xla.core.xla_model as xm
 from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP
 from torch_xla.distributed.fsdp import checkpoint_module as grad_ckpt_wrap
 
+from xla_add.mpu.layers import ( 
+        ColumnParallelLinear,
+        RowParallelLinear,
+        ParallelEmbedding,
+        )
+from xla_add.mpu.initialize import get_model_parallel_world_size
 from ...pytorch_utils import (
     Conv1D,
     find_pruneable_heads_and_indices,
@@ -151,8 +157,9 @@ class GPT2Attention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
-        self.split_size = self.embed_dim
-        if self.head_dim * self.num_heads != self.embed_dim:
+        self.head_dim = self.head_dim // get_model_parallel_world_size()
+        self.split_size = self.embed_dim // get_model_parallel_world_size()
+        if self.head_dim * self.num_heads != self.split_size:
             raise ValueError(
                 f"`embed_dim` must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
                 f" {self.num_heads})."
@@ -171,8 +178,10 @@ class GPT2Attention(nn.Module):
             self.q_attn = Conv1D(self.embed_dim, self.embed_dim)
         else:
             #self.c_attn = grad_ckpt_wrap(Conv1D(3 * self.embed_dim, self.embed_dim))
-            self.c_attn = Conv1D(3 * self.embed_dim, self.embed_dim)
-        self.c_proj = Conv1D(self.embed_dim, self.embed_dim)
+            self.c_attn_int = Conv1D(3 * self.embed_dim, self.embed_dim)
+            self.c_attn = ColumnParallelLinear(self.embed_dim, 3 * self.embed_dim, gather_output=False, bias=False)
+        #self.c_proj = Conv1D(self.embed_dim, self.embed_dim)
+        self.c_proj = RowParallelLinear(self.embed_dim, self.embed_dim, input_is_parallel=True, bias=False)
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
@@ -186,8 +195,8 @@ class GPT2Attention(nn.Module):
         index_attn = torch.cat([index, index + self.split_size, index + (2 * self.split_size)])
 
         # Prune conv1d layers
-        self.c_attn = prune_conv1d_layer(self.c_attn, index_attn, dim=1)
-        self.c_proj = prune_conv1d_layer(self.c_proj, index, dim=0)
+        #self.c_attn = prune_conv1d_layer(self.c_attn, index_attn, dim=1)
+        #self.c_proj = prune_conv1d_layer(self.c_proj, index, dim=0)
 
         # Update hyper params
         self.split_size = (self.split_size // self.num_heads) * (self.num_heads - len(heads))
@@ -329,6 +338,10 @@ class GPT2Attention(nn.Module):
             key, value = self.c_attn(encoder_hidden_states).split(self.split_size, dim=2)
             attention_mask = encoder_attention_mask
         else:
+            res1 =  self.c_attn_int(hidden_states)
+            res2 =  self.c_attn(hidden_states)
+            #import torch_xla.core.xla_model as xm
+            #xm.master_print(f"orginal-shape:{res1.size()}, modified-shape:{res2.size()}")
             query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
 
         query = self._split_heads(query, self.num_heads, self.head_dim)
@@ -365,8 +378,10 @@ class GPT2MLP(nn.Module):
     def __init__(self, intermediate_size, config):
         super().__init__()
         embed_dim = config.hidden_size
-        self.c_fc = Conv1D(intermediate_size, embed_dim)
-        self.c_proj = Conv1D(embed_dim, intermediate_size)
+        self.c_fc = ColumnParallelLinear(embed_dim, intermediate_size, gather_output=False)
+        self.c_proj = RowParallelLinear(intermediate_size, embed_dim, input_is_parallel=True)
+        #self.c_fc = Conv1D(intermediate_size, embed_dim)
+        #self.c_proj = Conv1D(embed_dim, intermediate_size)
         self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
@@ -690,8 +705,17 @@ class GPT2Model(GPT2PreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
+        from xla_add.mpu.initialize import get_data_parallel_rank, get_data_parallel_world_size, get_data_parallel_global_group
 
-        fsdp_wrap = lambda m: FSDP(m.to(xm.xla_device()), compute_dtype=torch.bfloat16, shard_param_on_dim_0=True, pin_layout_in_collective_ops=False)
+        fsdp_wrap = lambda m: FSDP(
+                m.to(xm.xla_device()),
+                compute_dtype=torch.bfloat16, 
+                shard_param_on_dim_0=True, 
+                pin_layout_in_collective_ops=False,
+                sharding_groups=get_data_parallel_global_group(),
+                sharding_world_size=get_data_parallel_world_size(),
+                sharding_rank=get_data_parallel_rank()
+                )
 
         self.embed_dim = config.hidden_size
 
