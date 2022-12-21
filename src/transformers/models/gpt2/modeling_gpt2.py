@@ -32,6 +32,7 @@ from xla_add.mpu.layers import (
         ColumnParallelLinear,
         RowParallelLinear,
         ParallelEmbedding,
+        VocabParallelEmbedding,
         )
 from xla_add.mpu.initialize import get_model_parallel_world_size
 from ...pytorch_utils import (
@@ -714,11 +715,11 @@ class GPT2Model(GPT2PreTrainedModel):
         self.embed_dim = config.hidden_size
 
         #self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
-        self.wte = ParallelEmbedding(config.vocab_size, self.embed_dim)
+        self.wte = VocabParallelEmbedding(config.vocab_size, self.embed_dim, padding_idx=None)
         self.wte.apply(self._init_weights)
 
-        #self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
-        self.wpe = ParallelEmbedding(config.max_position_embeddings, self.embed_dim)
+        self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
+        #self.wpe = ParallelEmbedding(config.max_position_embeddings, self.embed_dim)
         self.wpe.apply(self._init_weights)
 
 

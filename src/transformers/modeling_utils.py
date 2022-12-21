@@ -33,6 +33,7 @@ from torch.nn import CrossEntropyLoss
 
 from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 from transformers.utils.import_utils import is_sagemaker_mp_enabled
+from xla_add.mpu.layers import VocabParallelEmbedding
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
@@ -1179,7 +1180,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
             output_embeddings.out_features = input_embeddings.num_embeddings
 
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> VocabParallelEmbedding:
         """
         Resizes input token embeddings matrix of the model if `new_num_tokens != config.vocab_size`.
 
@@ -1221,8 +1222,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return self.get_input_embeddings()
 
     def _get_resized_embeddings(
-        self, old_embeddings: nn.Embedding, new_num_tokens: Optional[int] = None
-    ) -> nn.Embedding:
+        self, old_embeddings: VocabParallelEmbedding, new_num_tokens: Optional[int] = None
+        ) -> VocabParallelEmbedding:
         """
         Build a resized Embedding Module from a provided token Embedding Module. Increasing the size will add newly
         initialized vectors at the end. Reducing the size will remove vectors from the end
@@ -1255,15 +1256,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if old_num_tokens == new_num_tokens:
             return old_embeddings
 
-        if not isinstance(old_embeddings, nn.Embedding):
-            raise TypeError(
-                f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {nn.Embedding}. You"
-                " should either use a different resize function or make sure that `old_embeddings` are an instance of"
-                f" {nn.Embedding}."
-            )
+       #if not isinstance(old_embeddings, nn.Embedding):
+       #    raise TypeError(
+       #        f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {nn.Embedding}. You"
+       #        " should either use a different resize function or make sure that `old_embeddings` are an instance of"
+       #        f" {nn.Embedding}."
+       #    )
 
         # Build new embeddings
-        new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
+        #new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
+        new_embeddings = VocabParallelEmbedding(new_num_tokens, old_embedding_dim, padding_idx=None)
         new_embeddings.to(old_embeddings.weight.device, dtype=old_embeddings.weight.dtype)
 
         # initialize all new embeddings (in particular added tokens)
