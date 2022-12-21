@@ -709,7 +709,7 @@ class GPT2Model(GPT2PreTrainedModel):
         for i in range(config.num_hidden_layers):
             block = GPT2Block(config, layer_idx=i)
             block.apply(self._init_weights)
-            block.mlp = grad_ckpt_wrap(block.mlp)
+            #block.mlp = grad_ckpt_wrap(block.mlp)
             block.mlp = fsdp_wrap(block.mlp)
             block.attn = grad_ckpt_wrap(block.attn)
             block.attn = fsdp_wrap(block.attn)
