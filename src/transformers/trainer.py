@@ -821,11 +821,12 @@ class Trainer:
                 and not self.args.dataloader_drop_last
             ):
                 # Use a loop for TPUs when drop_last is False to have all batches have the same size.
+                from xla_add.mpu.initialize import get_data_parallel_rank, get_data_parallel_world_size
                 return DistributedSamplerWithLoop(
                     self.train_dataset,
                     batch_size=self.args.per_device_train_batch_size,
-                    num_replicas=self.args.world_size,
-                    rank=self.args.process_index,
+                    num_replicas=get_data_parallel_world_size(),
+                    rank=get_data_parallel_rank(),
                     seed=seed,
                 )
             else:
@@ -1896,7 +1897,7 @@ class Trainer:
         train_loss = self._total_loss_scalar / self.state.global_step
 
         metrics = speed_metrics("train", start_time, num_samples=num_train_samples, num_steps=self.state.max_steps)
-        self.store_flos()
+        # self.store_flos()
         metrics["total_flos"] = self.state.total_flos
         metrics["train_loss"] = train_loss
 

@@ -713,10 +713,12 @@ class GPT2Model(GPT2PreTrainedModel):
 
         self.embed_dim = config.hidden_size
 
-        self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
+        #self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
+        self.wte = nn.ParallelEmbedding(config.vocab_size, self.embed_dim)
         self.wte.apply(self._init_weights)
 
-        self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
+        #self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
+        self.wpe = nn.ParallelEmbedding(config.max_position_embeddings, self.embed_dim)
         self.wpe.apply(self._init_weights)
 
 
