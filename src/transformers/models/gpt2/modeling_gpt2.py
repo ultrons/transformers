@@ -177,8 +177,6 @@ class GPT2Attention(nn.Module):
             self.c_attn = Conv1D(2 * self.embed_dim, self.embed_dim)
             self.q_attn = Conv1D(self.embed_dim, self.embed_dim)
         else:
-            #self.c_attn = grad_ckpt_wrap(Conv1D(3 * self.embed_dim, self.embed_dim))
-            self.c_attn_int = Conv1D(3 * self.embed_dim, self.embed_dim)
             self.c_attn = ColumnParallelLinear(self.embed_dim, 3 * self.embed_dim, gather_output=False, bias=False)
         #self.c_proj = Conv1D(self.embed_dim, self.embed_dim)
         self.c_proj = RowParallelLinear(self.embed_dim, self.embed_dim, input_is_parallel=True, bias=False)
@@ -338,10 +336,6 @@ class GPT2Attention(nn.Module):
             key, value = self.c_attn(encoder_hidden_states).split(self.split_size, dim=2)
             attention_mask = encoder_attention_mask
         else:
-            res1 =  self.c_attn_int(hidden_states)
-            res2 =  self.c_attn(hidden_states)
-            #import torch_xla.core.xla_model as xm
-            #xm.master_print(f"orginal-shape:{res1.size()}, modified-shape:{res2.size()}")
             query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
 
         query = self._split_heads(query, self.num_heads, self.head_dim)
