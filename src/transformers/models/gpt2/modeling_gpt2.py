@@ -737,7 +737,7 @@ class GPT2Model(GPT2PreTrainedModel):
             block.mlp = fsdp_wrap(block.mlp)
             block.attn = grad_ckpt_wrap(block.attn)
             block.attn = fsdp_wrap(block.attn)
-            #block = fsdp_wrap(grad_ckpt_wrap(block))
+            block = fsdp_wrap(grad_ckpt_wrap(block))
             block = fsdp_wrap(block)
             blocks.append(block)
         self.h = nn.ModuleList(blocks)
