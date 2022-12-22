@@ -20,6 +20,8 @@ import os
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
+import torch_xla.debug.profiler as xp
+
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -417,14 +419,15 @@ class GPT2Block(nn.Module):
     ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
-        attn_outputs = self.attn(
-            hidden_states,
-            layer_past=layer_past,
-            attention_mask=attention_mask,
-            head_mask=head_mask,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-        )
+        with xp.Trace('Self-Attention'):
+            attn_outputs = self.attn(
+                hidden_states,
+                layer_past=layer_past,
+                attention_mask=attention_mask,
+                head_mask=head_mask,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+            )
         attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attn_outputs[1:]
         # residual connection
@@ -454,7 +457,9 @@ class GPT2Block(nn.Module):
 
         residual = hidden_states
         hidden_states = self.ln_2(hidden_states)
-        feed_forward_hidden_states = self.mlp(hidden_states)
+
+        with xp.Trace('MLP'):
+            feed_forward_hidden_states = self.mlp(hidden_states)
         # residual connection
         hidden_states = residual + feed_forward_hidden_states
 
@@ -734,8 +739,8 @@ class GPT2Model(GPT2PreTrainedModel):
             block.mlp = fsdp_wrap(block.mlp)
             block.attn = grad_ckpt_wrap(block.attn)
             block.attn = fsdp_wrap(block.attn)
-            #block = fsdp_wrap(grad_ckpt_wrap(block))
-            block = fsdp_wrap(block)
+            block = fsdp_wrap(grad_ckpt_wrap(block))
+            #block = fsdp_wrap(block)
             blocks.append(block)
         self.h = nn.ModuleList(blocks)
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
