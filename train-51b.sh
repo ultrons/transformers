@@ -17,7 +17,7 @@ python3 -u examples/pytorch/xla_spawn.py    \
 --per_device_train_batch_size 4     \
 --per_device_eval_batch_size 4  \
 --do_train   \
---tensor_parallel_size 4 \
+--tensor_parallel_size 8 \
 --use_fsdp  \
 --use_nested_fsdp    \
 --output_dir /tmp/test-clm      \
