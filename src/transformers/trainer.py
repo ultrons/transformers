@@ -1804,6 +1804,9 @@ class Trainer:
             profile_epoch = int(os.environ.get('PROFILE_EPOCH', -1))
             profile_duration = int(os.environ.get('PROFILE_DURATION_MS', 20000))
             profile_logdir = os.environ.get('PROFILE_LOGDIR', None)
+
+            self.num_compilations = 0
+            self.last_time_stamp = time.time()
             for step, inputs in enumerate(epoch_iterator):
                 if step == 0 and epoch == 0:
                     print('input sharding', {k: (v.shape, torch_xla._XLAC._get_xla_sharding_spec(v)) for k, v in inputs.items()})
@@ -2694,7 +2697,27 @@ class Trainer:
         else:
             self.accelerator.backward(loss)
 
+
+        xm.mark_step()
+        if self.num_compilations != met.metric_data('CompileTime')[:1] :
+           self.num_compilations = met.metric_data('CompileTime')[:1]
+        else:
+           step_time = time.time() - self.last_time_stamp
+           num_tokens = inputs["input_ids"].numel()
+           xm.master_print(f"Step time: {step_time}: Model TFLOPS: {self.model_flops(step_time, num_tokens)}")
+           xm.master_print(f"Memory Info: {xm.get_memory_info(xm.xla_device())}")
+        self.last_time_step = time.time()
+        
+
         return loss.detach() / self.args.gradient_accumulation_steps
+
+    def model_flops(self, step_time, num_tokens):
+        num_trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        model_flops = 6 * num_trainable_params * num_tokens
+        model_tflops_per_second = model_flops / step_time / 1e12  
+        return model_tflops_per_second
+
+
 
     def compute_loss(self, model, inputs, return_outputs=False):
         """
@@ -3168,6 +3191,9 @@ class Trainer:
 
             if is_torch_tpu_available():
                 xm.mark_step()
+
+                    
+
 
             # Update containers on host
             if loss is not None:
