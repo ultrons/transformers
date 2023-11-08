@@ -1806,8 +1806,8 @@ class Trainer:
             profile_logdir = os.environ.get('PROFILE_LOGDIR', None)
 
             self.num_compilations = 0
-            self.last_time_stamp = time.time()
             for step, inputs in enumerate(epoch_iterator):
+                self.last_time_stamp = time.time()
                 if step == 0 and epoch == 0:
                     print('input sharding', {k: (v.shape, torch_xla._XLAC._get_xla_sharding_spec(v)) for k, v in inputs.items()})
                 total_batched_samples += 1
@@ -1899,6 +1899,17 @@ class Trainer:
                         if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                             self.lr_scheduler.step()
 
+
+                    xm.mark_step()
+                    if self.num_compilations != met.metric_data('CompileTime')[:1] :
+                       self.num_compilations = met.metric_data('CompileTime')[:1]
+                    else:
+                       xm.wait_device_ops() 
+                       step_time = time.time() - self.last_time_stamp
+                       num_tokens = inputs["input_ids"].numel() / self.args.spmd_mesh.ici_mesh_shape[1]
+                       xm.master_print(f"Num Tokens:{num_tokens},ICI mesh shape: {self.args.spmd_mesh.ici_mesh_shape}")
+                       xm.master_print(f"Step time: {step_time}: Model TFLOPS: {self.model_flops(step_time, num_tokens)}")
+
                     model.zero_grad()
                     self.state.global_step += 1
                     self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
@@ -1907,6 +1918,7 @@ class Trainer:
                     self._maybe_log_save_evaluate(tr_loss, model, trial, epoch, ignore_keys_for_eval)
                 else:
                     self.control = self.callback_handler.on_substep_end(args, self.state, self.control)
+
 
                 if self.control.should_epoch_stop or self.control.should_training_stop:
                     break
@@ -2698,15 +2710,8 @@ class Trainer:
             self.accelerator.backward(loss)
 
 
-        xm.mark_step()
-        if self.num_compilations != met.metric_data('CompileTime')[:1] :
-           self.num_compilations = met.metric_data('CompileTime')[:1]
-        else:
-           step_time = time.time() - self.last_time_stamp
-           num_tokens = inputs["input_ids"].numel()
-           xm.master_print(f"Step time: {step_time}: Model TFLOPS: {self.model_flops(step_time, num_tokens)}")
-           xm.master_print(f"Memory Info: {xm.get_memory_info(xm.xla_device())}")
-        self.last_time_step = time.time()
+           # TODO: implement memory info for PJRT
+           #xm.master_print(f"Memory Info: {xm.get_memory_info(xm.xla_device())}")
         
 
         return loss.detach() / self.args.gradient_accumulation_steps
