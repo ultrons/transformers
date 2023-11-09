@@ -1904,10 +1904,11 @@ class Trainer:
                     if self.num_compilations != met.metric_data('CompileTime')[:1] :
                        self.num_compilations = met.metric_data('CompileTime')[:1]
                     else:
-                       xm.wait_device_ops() 
+                       xm.rendezvous('step')
                        step_time = time.time() - self.last_time_stamp
-                       num_tokens = inputs["input_ids"].numel() / self.args.spmd_mesh.ici_mesh_shape[1]
-                       xm.master_print(f"Num Tokens:{num_tokens},ICI mesh shape: {self.args.spmd_mesh.ici_mesh_shape}")
+                       data, fsdp, mdl = self.args.spmd_mesh.ici_mesh_shape
+                       num_devices = data * fsdp * mdl
+                       num_tokens = inputs["input_ids"].numel() / num_devices
                        xm.master_print(f"Step time: {step_time}: Model TFLOPS: {self.model_flops(step_time, num_tokens)}")
 
                     model.zero_grad()
